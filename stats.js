@@ -20,8 +20,7 @@ var gauges = {};
 var sets = {};
 var counter_rates = {};
 var timer_data = {};
-var pctThreshold = null;
-var debugInt, flushInterval, keyFlushInt, server, mgmtServer;
+var debugInt, keyFlushInt, server, mgmtServer;
 var startup_time = Math.round(new Date().getTime() / 1000);
 var backendEvents = new events.EventEmitter();
 
@@ -54,8 +53,6 @@ function flushMetrics() {
     sets: sets,
     counter_rates: counter_rates,
     timer_data: timer_data,
-    pctThreshold: pctThreshold,
-    histogram: config.histogram
   }
 
   // After all listeners, reset the stats
@@ -81,7 +78,7 @@ function flushMetrics() {
     }
   });
 
-  pm.process_metrics(metrics_hash, flushInterval, time_stamp, function emitFlush(metrics) {
+  pm.process_metrics(metrics_hash, config, time_stamp, function emitFlush(metrics) {
     backendEvents.emit('flush', time_stamp, metrics);
   });
 
@@ -301,13 +298,15 @@ config.configFile(process.argv[2], function (config, oldConfig) {
 
     util.log("server is up");
 
-    pctThreshold = config.percentThreshold || 90;
-    if (!Array.isArray(pctThreshold)) {
-      pctThreshold = [ pctThreshold ]; // listify percentiles so single values work the same
+    // config: set defaults and/or bring in correct format
+    config.percentThreshold = config.percentThreshold || 90;
+    if (!Array.isArray(config.percentThreshold)) {
+      // listify percentiles so single values work the same
+      config.percentThreshold = [ config.percentThreshold ];
     }
 
-    flushInterval = Number(config.flushInterval || 10000);
-    config.flushInterval = flushInterval;
+    config.flushInterval = Number(config.flushInterval || 10000);
+    config.histogram = config.histogram || [];
 
     if (config.backends) {
       for (var i = 0; i < config.backends.length; i++) {
@@ -319,7 +318,7 @@ config.configFile(process.argv[2], function (config, oldConfig) {
     }
 
     // Setup the flush timer
-    var flushInt = setInterval(flushMetrics, flushInterval);
+    var flushInt = setInterval(flushMetrics, config.flushInterval);
 
     if (keyFlushInterval > 0) {
       var keyFlushPercent = Number((config.keyFlush && config.keyFlush.percent) || 100);
